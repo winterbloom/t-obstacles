@@ -43,7 +43,7 @@ class Simulator(object):
 	def display_sim(self, t, event=None):
 		self.draw_obstacles(t)
 		self.draw_rrt()
-		self.draw_base()
+		# self.draw_base()
 
 	# draws a dot for the robot
 	def draw_base(self):
@@ -56,22 +56,32 @@ class Simulator(object):
 	# draws the rrt by looping over each node and each node's connections to other nodes
 	def draw_rrt(self):
 		for node, connections in self.rrt.data.items():
-			if not node in self.rrt_node_pointers:
-				color = 'dark green' if node.valid else 'red'
 
+			color = 'dark green' if node.valid else 'red'
+
+			if not node in self.rrt_node_pointers:
 				self.rrt_node_pointers[node] = self.canvas.create_oval(self.draw_dot((
 					node.loc[0],
 					node.loc[1]),
 					node.size),
 					fill=color)
+			else:
+				self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color)
 
 			# draw the connections too
 			for connection in connections:
-				if not node in self.rrt_connection_pointers:
-					# get the actual node, not the name of it
-					other_node = self.rrt.name_to_node[connection.end]
+				
+				color = 'dark green' if connection.valid else 'red'
 
-					color = 'dark green' if connection.valid else 'red'
+				invert = self.invert(connection)
+				to_draw = connection # whichever connection to draw
+				if connection.valid and not invert.valid:
+					to_draw = invert # always draw an invalid connection if you can
+
+				if not to_draw.start in self.rrt_connection_pointers:
+					# get the actual node, not the name of it
+					other_node = to_draw.end
+					node = to_draw.start
 
 					self.rrt_connection_pointers[node] = self.canvas.create_line(
 						node.loc[0],
@@ -80,6 +90,13 @@ class Simulator(object):
 						other_node.loc[1],
 						fill=color,
 						width=4)
+				else:
+					self.canvas.itemconfig(self.rrt_node_pointers[to_draw.start], fill=color)
+
+	# returns the connection which goes end -> start
+	def invert(self, connection):
+		name = self.rrt.connect_name(connection.end, connection.start)
+		return self.rrt.connects[name]
 
 	# loops over the obstacles and draws them in turn at time = t
 	def draw_obstacles(self, t):

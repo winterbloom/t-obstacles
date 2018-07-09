@@ -30,10 +30,28 @@ class RRT(object):
 		self.rrt_index = 0
 
 		self.data = {}
+		self.connects = {}
 		self.name_to_node = {} # converts a name to a node
 
+	def __str__(self):
+		str_list = []
+		str_list.append("RRT: [")
+
+		for key, values in self.data.items():
+			str_list.append(str(key) + " ")
+			for value in values:
+				str_list.append(str(value) + " ")
+
+		str_list.append("]")
+		return ''.join(str_list)
+
 	def update(self, t):
+
+		# print self
+
 		if self.sim:
+			self.validity(self.add_connect(None, self.name_to_node[0]))
+
 			self.add_branches()
 			self.sim.display_sim(t)
 
@@ -41,14 +59,14 @@ class RRT(object):
 		self.root.after(int(Tune.time_step * 1000), self.update, t + Tune.time_step)
 
 	# creates a node which is at the given x, y; connected to connections; and has a name
-	def add_node(self, loc, connections_names):
+	def add_node(self, loc, connection_nodes):
 		new_node = Node(self.rrt_index, loc)
 
 		# loop over names of connections and create a new one
 
 		connections = []
-		for connection_name in connections_names:
-			connections.append(Connection(self.rrt_index, connection_name))
+		for connection_node in connection_nodes:
+			connections.append(self.add_connect(new_node, connection_node))
 		self.data[new_node] = connections
 
 		self.name_to_node[self.rrt_index] = new_node
@@ -57,11 +75,24 @@ class RRT(object):
 
 		return new_node
 
+	def add_connect(self, start, end):
+		new_connect = Connection(start, end)
+		
+		new_connect_name = self.connect_name(start, end)
+		self.connects[new_connect_name] = new_connect
+		return new_connect
+
+	def node_name(self, node):
+		return str(node.name) if node else "None"
+
+	def connect_name(self, start, end):
+		return self.node_name(start) + ":" + self.node_name(end)
+
 	# creates a series of random branches off of each existing node
 	def add_branches(self):
 		for key in self.data.keys():
 			add_branch = random.random() <= Tune.branch_creation
-			if add_branch:
+			if add_branch and key.valid:
 				self.add_branch(key.name)
 
 	# creates a branch in a random direction with given name off of given trunk
@@ -76,8 +107,21 @@ class RRT(object):
 
 		trunk = self.name_to_node[trunk_name]
 
-		new_branch = self.add_node(rand_loc.add(trunk.loc), [trunk_name, ])
-		self.data[trunk].append(Connection(trunk_name, new_branch.name))
+		new_branch = self.add_node(rand_loc.add(trunk.loc), [trunk, ])
+		self.data[trunk].append(self.add_connect(trunk, new_branch))
+
+	# check validity of node paths, moves downards through connections to in_connect.end
+	def validity(self, in_connect):
+		for connection in self.data[in_connect.end]:
+			# if this node isn't valid, nothing it connects to is
+			# ignore the way you came from
+			if not connection.valid and connection.end is not in_connect.start:
+				connection.valid = False
+				print "invalid"
+				connection.end.valid = False
+				self.validity(connection)
+			# look if the connection intersects an obstacle
+
 
 # represents a single node in the rrt
 class Node(object):
@@ -89,15 +133,21 @@ class Node(object):
 		self.valid = True
 
 	def __str__(self):
-		return self.name + ": (" + str(self.loc[0]) + ", " + str(self.loc[1]) + ")"
+		return ("Node: [" + str(self.valid) + " " + str(self.name) + 
+			": (" + str(self.loc[0]) + ", " + str(self.loc[1]) + ") ]")
 
 # connects two nodes
 class Connection(object):
+
 	def __init__(self, start, end):
 		self.start = start
 		self.end = end
 
-		self.valid = True
+		self.valid = end.name is not 1
+
+	def __str__(self):
+		return ("Connect: [" + str(self.valid) + " (" + 
+			str(self.start) + " to " + str(self.end) + ") ]")
 
 def main():
 
@@ -133,7 +183,9 @@ def main():
 
 	root = tk.Tk()
 	rrt = RRT(root)
-	rrt.add_node(rrt.base, [])
+	new_node = rrt.add_node(rrt.base, [])
+	rrt.add_branch(0)
+	# print rrt
 	sim = Simulator(root, obstacles, rrt)
 	rrt.sim = sim
 
