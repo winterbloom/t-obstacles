@@ -173,26 +173,31 @@ class Vector(object):
 
 class SimRobot(object):
 	def __init__(self):
-		self.size = 5
+		self.size = 7
+		self.x = 200
+		self.y = 375
 
-	def move_forward(self):
-		pass
+		self.rrt = {}
+		self.name_to_node = {} # converts a name to a node
 
-	def move_backward(self):
-		pass
-
-	def move_right(self):
-		pass
-
-	def move_left(self):
-		pass
-
-	def stop(self):
-		pass
+	def add_node(self, name, x, y, connections):
+		new_node = Node(name, x, y)
+		self.rrt[new_node] = connections
+		self.name_to_node[name] = new_node
 		
+# represents a single node in the rrt
+class Node(object):
+	def __init__(self, name, x, y):
+		self.name = name
+		self.size = 7
+		self.x = x
+		self.y = y
+
+	def __str__(self):
+		return self.name + ": (" + str(self.x) + ", " + str(self.y) + ")"
 
 class Simulator(object):
-	def __init__(self, root, obstacles, robot_handle):
+	def __init__(self, root, obstacles, robot):
 		self.canvas = None
 		self.root = root
 
@@ -201,10 +206,12 @@ class Simulator(object):
 		self.time_step = .5 # in seconds
 
 		self.obstacles = obstacles
-		self.robot_handle = robot_handle
+		self.robot = robot
 
 		self.obstacle_pointers = {}
 		self.centroid_pointers = {}
+		self.rrt_node_pointers = {}
+		self.rrt_connection_pointers = {}
 
 		self.start_draw()
 
@@ -212,43 +219,59 @@ class Simulator(object):
 		self.canvas = tk.Canvas(self.root, width=self.canvas_width, height=self.canvas_height)
 		self.canvas.pack()
 
-        self.root.bind('<KeyPress>', self.keydown)
-        self.root.bind('<KeyRelease>', self.keyup)        
-
 		stop = tk.Button(self.root, text='Exit')
 		stop.pack(side='bottom')
 		stop.bind('<Button-1>', self.stop_prog)
 
-		draw = tk.Button(self.root, text='Start')
+		draw = tk.Button(self.root, text='Start', command= lambda: self.display_sim(0))
 		draw.pack(side='bottom')
-		draw.bind('<Button-1>', self.display_sim)
-
-	def keydown(self, event):
-		key = event.char
-    	print key
-    	if (key is "w"):
-    		self.robot_handle.move_forward()
-    	elif (key is "s"):
-    		self.robot_handle.move_backward()
-    	elif (key is "d"):
-    		self.robot_handle.move_right()
-    	elif (key is "a"):
-    		self.robot_handle.move_left()
-    	else:
-    		self.robot_handle.move_forward()
-
-	def keyup(self, event):
-		self.robot_handle.stop()
+		# draw.bind('<Button-1>', self.display_sim)
 
 	def stop_prog(self, event=None):
 		self.root.quit()
 
-	def display_sim(self, event=None):
-		self.draw_obstacles(0, True)
+	def display_sim(self, t, event=None):
+		self.draw_obstacles(t)
+		self.draw_robot()
+		self.draw_rrt()
+
+		# wait one time_step, then redraw
+		self.root.after(int(self.time_step * 1000), self.display_sim, t + self.time_step, False)
+
+	# draws a dot for the robot
+	def draw_robot(self):
+		self.canvas.create_oval(self.draw_dot((
+			self.robot.x, 
+			self.robot.y),
+			self.robot.size), 
+			fill='green')
+
+	# draws the rrt connected to the robot
+	def draw_rrt(self):
+		for key, value in self.robot.rrt.items():
+			if not key in self.rrt_node_pointers:
+				self.rrt_node_pointers[key] = self.canvas.create_oval(self.draw_dot((
+					key.x,
+					key.y),
+					key.size),
+					fill='dark green')
+
+			# draw the connections too
+			for connection in value:
+				if not key in self.rrt_connection_pointers:
+					# get the actual node, not the name of it
+					other_node = self.robot.name_to_node[connection]
+
+					self.rrt_connection_pointers[key] = self.canvas.create_line(
+						key.x,
+						key.y,
+						other_node.x,
+						other_node.y,
+						fill='dark green',
+						width=4)
 
 	# loops over the obstacles and draws them in turn at time = t
-	# if first_time, sets the pointers; otherwise, uses the pointers
-	def draw_obstacles(self, t, first_time):
+	def draw_obstacles(self, t):
 		for obstacle in self.obstacles:
 			a = obstacle.velocity[2]
 			absolute_obs = obstacle.absolute_pos(t)
@@ -260,22 +283,23 @@ class Simulator(object):
 				absolute_points.append(abs_point[0])
 				absolute_points.append(abs_point[1])
 
-			if first_time:
+			if not obstacle.t0 in self.obstacle_pointers:
 				obstacle_pointer = self.canvas.create_polygon(absolute_points, fill='blue')
 				# use t0 as a key, since we can assume no two shapes start atop each other
 				self.obstacle_pointers[obstacle.t0] = obstacle_pointer
-
-				# draw a dot at the centroid of the shape
-				# need to add to the t0 point to get the absolute location
-				absolute_centroid = self.draw_dot(obstacle.centroid(t).add(obstacle.t0), 3)
-				self.centroid_pointers[obstacle.t0] = self.canvas.create_oval(absolute_centroid, 
-					fill="cyan", outline="")
 			else:
 				# modify the existing obstacle
 				obstacle_pointer = self.obstacle_pointers.get(obstacle.t0)
 				self.canvas.coords(obstacle_pointer, tuple(absolute_points))
 				# print "absolute points: ", absolute_points
 
+			if not obstacle.t0 in self.centroid_pointers:
+				# draw a dot at the centroid of the shape
+				# need to add to the t0 point to get the absolute location
+				absolute_centroid = self.draw_dot(obstacle.centroid(t).add(obstacle.t0), 3)
+				self.centroid_pointers[obstacle.t0] = self.canvas.create_oval(absolute_centroid, 
+					fill="cyan", outline="")
+			else:
 				centroid_pointer = self.centroid_pointers.get(obstacle.t0)
 				absolute_centroid = self.draw_dot(obstacle.centroid(t).add(obstacle.t0), 3)
 				# print "abs, ", absolute_centroid
@@ -283,8 +307,6 @@ class Simulator(object):
 
 
 
-		# wait one time_step, then redraw
-		self.root.after(int(self.time_step * 1000), self.draw_obstacles, t + self.time_step, False)
 
 	# there is no built-in method for drawing a dot, so this implements one
 	# returns the coordinates for a dot
@@ -331,7 +353,10 @@ def main():
 	# print matrix_test.mult(Vector((2, 5)))
 
 	root = tk.Tk()
-	sim = Simulator(root, obstacles)
+	robot = SimRobot()
+	robot.add_node("A", 200, 350, ("B"))
+	robot.add_node("B", 225, 325, ("A"))
+	sim = Simulator(root, obstacles, robot)
 
 	root.mainloop()
 
