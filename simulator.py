@@ -3,6 +3,15 @@ import sys
 import math
 import random
 
+# stores variables to tune all random numbers
+class Tune(object):
+	# length of randomly created branches
+	branch_len_min = 20.0
+	branch_len_max = 180.0
+
+	# probability of creating a new branch off of an existing one, checked each loop cycle
+	branch_creation = .3
+
 class Shape(object):
 	# Takes an tuple of vectors defining the corners of the shape relative to the center, 
 	# clockwise from UL; where the center starts; and a velocity that the shape is moving at
@@ -175,8 +184,8 @@ class Vector(object):
 class SimRobot(object):
 	def __init__(self):
 		self.size = 7
-		self.x = 200
-		self.y = 375
+		self.speed = 20
+		self.loc = Vector((200, 375))
 
 		self.rrt_index = 0
 
@@ -184,9 +193,16 @@ class SimRobot(object):
 		self.name_to_node = {} # converts a name to a node
 
 	# creates a node which is at the given x, y; connected to connections; and has a name
-	def add_node(self, loc, connections):
+	def add_node(self, loc, connections_names):
 		new_node = Node(self.rrt_index, loc)
+
+		# loop over names of connections and create a new one
+
+		connections = []
+		for connection_name in connections_names:
+			connections.append(Connection(self.rrt_index, connection_name))
 		self.rrt[new_node] = connections
+
 		self.name_to_node[self.rrt_index] = new_node
 
 		self.rrt_index += 1
@@ -196,7 +212,7 @@ class SimRobot(object):
 	# creates a branch in a random direction with given name off of given trunk
 	def add_branch(self, trunk_name):
 		rand_a = random.random() * 2.0*math.pi # random number between [0, 2 pi)
-		rand_dist = random.random() * 180.0 + 20 # random distance
+		rand_dist = random.random() * Tune.branch_len_max + Tune.branch_len_min # random distance
 
 		rand_x = math.cos(rand_a) * rand_dist
 		rand_y = math.sin(rand_a) * rand_dist
@@ -206,7 +222,7 @@ class SimRobot(object):
 		trunk = self.name_to_node[trunk_name]
 
 		new_branch = self.add_node(rand_loc.add(trunk.loc), [trunk_name, ])
-		self.rrt[trunk].append(new_branch.name)
+		self.rrt[trunk].append(Connection(trunk_name, new_branch.name))
 
 		
 # represents a single node in the rrt
@@ -218,6 +234,12 @@ class Node(object):
 
 	def __str__(self):
 		return self.name + ": (" + str(self.loc[0]) + ", " + str(self.loc[1]) + ")"
+
+# connects two nodes
+class Connection(object):
+	def __init__(self, start, end):
+		self.start = start
+		self.end = end
 
 class Simulator(object):
 	def __init__(self, root, obstacles, robot):
@@ -257,8 +279,8 @@ class Simulator(object):
 		self.add_branches()
 
 		self.draw_obstacles(t)
-		self.draw_robot()
 		self.draw_rrt()
+		self.draw_robot()
 
 		# wait one time_step, then redraw
 		self.root.after(int(self.time_step * 1000), self.display_sim, t + self.time_step, False)
@@ -266,13 +288,15 @@ class Simulator(object):
 	# creates a series of random branches off of each existing node
 	def add_branches(self):
 		for key in self.robot.rrt.keys():
-			self.robot.add_branch(key.name)
+			add_branch = random.random() <= Tune.branch_creation
+			if add_branch:
+				self.robot.add_branch(key.name)
 
 	# draws a dot for the robot
 	def draw_robot(self):
 		self.canvas.create_oval(self.draw_dot((
-			self.robot.x, 
-			self.robot.y),
+			self.robot.loc[0], 
+			self.robot.loc[1]),
 			self.robot.size), 
 			fill='green')
 
@@ -290,7 +314,7 @@ class Simulator(object):
 			for connection in value:
 				if not key in self.rrt_connection_pointers:
 					# get the actual node, not the name of it
-					other_node = self.robot.name_to_node[connection]
+					other_node = self.robot.name_to_node[connection.end]
 
 					self.rrt_connection_pointers[key] = self.canvas.create_line(
 						key.loc[0],
@@ -334,9 +358,6 @@ class Simulator(object):
 				absolute_centroid = self.draw_dot(obstacle.centroid(t).add(obstacle.t0), 3)
 				# print "abs, ", absolute_centroid
 				self.canvas.coords(centroid_pointer, absolute_centroid)
-
-
-
 
 	# there is no built-in method for drawing a dot, so this implements one
 	# returns the coordinates for a dot
@@ -384,7 +405,7 @@ def main():
 
 	root = tk.Tk()
 	robot = SimRobot()
-	robot.add_node(Vector((200, 350)), [])
+	robot.add_node(robot.loc, [])
 	sim = Simulator(root, obstacles, robot)
 
 	root.mainloop()
