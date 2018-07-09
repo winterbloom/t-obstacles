@@ -1,23 +1,22 @@
 import Tkinter as tk
 
-import sys
-import math
-import random
+# import sys
+# import math
+# import random
 
-from linalgebra import *
-from rrt import *
+# from linalgebra import *
+# from rrt import *
 
 class Simulator(object):
-	def __init__(self, root, obstacles, robot):
+	def __init__(self, root, obstacles, rrt):
 		self.canvas = None
 		self.root = root
 
 		self.canvas_width = 400
 		self.canvas_height = 400
-		self.time_step = .5 # in seconds
 
 		self.obstacles = obstacles
-		self.robot = robot
+		self.rrt = rrt
 
 		self.obstacle_pointers = {}
 		self.centroid_pointers = {}
@@ -34,7 +33,7 @@ class Simulator(object):
 		stop.pack(side='bottom')
 		stop.bind('<Button-1>', self.stop_prog)
 
-		draw = tk.Button(self.root, text='Start', command= lambda: self.display_sim(0))
+		draw = tk.Button(self.root, text='Start', command= lambda: self.rrt.update(0))
 		draw.pack(side='bottom')
 		# draw.bind('<Button-1>', self.display_sim)
 
@@ -42,33 +41,21 @@ class Simulator(object):
 		self.root.quit()
 
 	def display_sim(self, t, event=None):
-		self.add_branches()
-
 		self.draw_obstacles(t)
 		self.draw_rrt()
-		self.draw_robot()
-
-		# wait one time_step, then redraw
-		self.root.after(int(self.time_step * 1000), self.display_sim, t + self.time_step, False)
-
-	# creates a series of random branches off of each existing node
-	def add_branches(self):
-		for key in self.robot.rrt.keys():
-			add_branch = random.random() <= Tune.branch_creation
-			if add_branch:
-				self.robot.add_branch(key.name)
+		self.draw_base()
 
 	# draws a dot for the robot
-	def draw_robot(self):
+	def draw_base(self):
 		self.canvas.create_oval(self.draw_dot((
-			self.robot.loc[0], 
-			self.robot.loc[1]),
-			self.robot.size), 
+			self.rrt.base[0], 
+			self.rrt.base[1]),
+			self.rrt.size), 
 			fill='green')
 
 	# draws the rrt by looping over each node and each node's connections to other nodes
 	def draw_rrt(self):
-		for node, connections in self.robot.rrt.items():
+		for node, connections in self.rrt.data.items():
 			if not node in self.rrt_node_pointers:
 				color = 'dark green' if node.valid else 'red'
 
@@ -82,7 +69,7 @@ class Simulator(object):
 			for connection in connections:
 				if not node in self.rrt_connection_pointers:
 					# get the actual node, not the name of it
-					other_node = self.robot.name_to_node[connection.end]
+					other_node = self.rrt.name_to_node[connection.end]
 
 					color = 'dark green' if connection.valid else 'red'
 
@@ -133,52 +120,3 @@ class Simulator(object):
 	# returns the coordinates for a dot
 	def draw_dot(self, coords, size):
 		return (coords[0] - size, coords[1] - size, coords[0] + size, coords[1] + size)
-
-def main():
-
-	null = Vector((0, 0, 0))
-
-	# one pentagon, one not square to the axes, and one with a velocity
-	ob1 = Shape((
-		Vector((-40, -40)), 
-		Vector((40, -40)), 
-		Vector((60, 0)), 
-		Vector((40, 40)), 
-		Vector((-40, 40))
-		),
-		Vector((100, 100, 0)), null)
-
-	ob2 = Shape((
-		Vector((0, -40)), 
-		Vector((40, 0)), 
-		Vector((0, 40)), 
-		Vector((-40, 0))
-		), 
-		Vector((200, 240, 0)), null)
-
-	ob3 = Shape((
-		Vector((-50, -20)), 
-		Vector((50, -20)), 
-		Vector((50, 20)), 
-		Vector((-50, 20))
-		), 
-		Vector((300, 300, 0)), Vector((6, 0, math.pi/10)))
-
-	obstacles = (ob1, ob2, ob3)
-
-	# print ob1.centroid(0)
-
-	# print ob3.rotate(math.pi/2)
-
-	# matrix_test = Matrix((Vector((2, 0)), Vector((0, 1))))
-	# print matrix_test.mult(Vector((2, 5)))
-
-	root = tk.Tk()
-	robot = RRT()
-	robot.add_node(robot.loc, [])
-	sim = Simulator(root, obstacles, robot)
-
-	root.mainloop()
-
-if __name__ == "__main__":
-	sys.exit(main())
