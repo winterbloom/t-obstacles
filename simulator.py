@@ -1,6 +1,7 @@
 import Tkinter as tk
 import sys
 import math
+import random
 
 class Shape(object):
 	# Takes an tuple of vectors defining the corners of the shape relative to the center, 
@@ -180,21 +181,37 @@ class SimRobot(object):
 		self.rrt = {}
 		self.name_to_node = {} # converts a name to a node
 
-	def add_node(self, name, x, y, connections):
-		new_node = Node(name, x, y)
+	# creates a node which is at the given x, y; connected to connections; and has a name
+	def add_node(self, name, loc, connections):
+		new_node = Node(name, loc)
 		self.rrt[new_node] = connections
 		self.name_to_node[name] = new_node
+		return new_node
+
+	def add_branch(self, name, trunk_name):
+		rand_a = random.random() * 2.0*math.pi # random number between [0, 2 pi)
+		rand_dist = random.random() * 200.0 # random distance
+
+		rand_x = math.cos(rand_a) * rand_dist
+		rand_y = math.sin(rand_a) * rand_dist
+
+		rand_loc = Vector((rand_x, rand_y))
+
+		trunk = self.name_to_node[trunk_name]
+
+		new_branch = self.add_node(name, rand_loc.add(trunk.loc), [trunk_name, ])
+		self.rrt[trunk].append(new_branch.name)
+
 		
 # represents a single node in the rrt
 class Node(object):
-	def __init__(self, name, x, y):
+	def __init__(self, name, loc):
 		self.name = name
 		self.size = 7
-		self.x = x
-		self.y = y
+		self.loc = loc
 
 	def __str__(self):
-		return self.name + ": (" + str(self.x) + ", " + str(self.y) + ")"
+		return self.name + ": (" + str(self.loc[0]) + ", " + str(self.loc[1]) + ")"
 
 class Simulator(object):
 	def __init__(self, root, obstacles, robot):
@@ -246,13 +263,13 @@ class Simulator(object):
 			self.robot.size), 
 			fill='green')
 
-	# draws the rrt connected to the robot
+	# draws the rrt by looping over each node and each node's connections to other nodes
 	def draw_rrt(self):
 		for key, value in self.robot.rrt.items():
 			if not key in self.rrt_node_pointers:
 				self.rrt_node_pointers[key] = self.canvas.create_oval(self.draw_dot((
-					key.x,
-					key.y),
+					key.loc[0],
+					key.loc[1]),
 					key.size),
 					fill='dark green')
 
@@ -263,10 +280,10 @@ class Simulator(object):
 					other_node = self.robot.name_to_node[connection]
 
 					self.rrt_connection_pointers[key] = self.canvas.create_line(
-						key.x,
-						key.y,
-						other_node.x,
-						other_node.y,
+						key.loc[0],
+						key.loc[1],
+						other_node.loc[0],
+						other_node.loc[1],
 						fill='dark green',
 						width=4)
 
@@ -354,8 +371,8 @@ def main():
 
 	root = tk.Tk()
 	robot = SimRobot()
-	robot.add_node("A", 200, 350, ("B"))
-	robot.add_node("B", 225, 325, ("A"))
+	robot.add_node("A", Vector((200, 350)), [])
+	robot.add_branch("B", "A")
 	sim = Simulator(root, obstacles, robot)
 
 	root.mainloop()
