@@ -16,7 +16,7 @@ class RRT(object):
 	branch_len_max = 180.0
 
 	# the smaller, the fewer branches are created
-	branch_weight = 3
+	branch_weight = 10
 
 	# update in seconds
 	time_step = .5
@@ -75,7 +75,7 @@ class RRT(object):
 
 		if self.sim and base:
 			self.validity(self.add_connect(None, base, 0), t)
-			print self
+			# print self
 			self.sim.display_sim(t)
 
 		# wait one time_step, then redraw
@@ -172,9 +172,10 @@ class RRT(object):
 			# TODO: look if the connection intersects an obstacle
 
 
-			print "start", in_connect.end
-			print "end", connection.end
-			print "valid", connection.valid
+			# print "start", in_connect.end
+			# print "end", connection.end
+			# print "valid", connection.valid
+
 			# if this node isn't valid, nothing it connects to is
 			# ignore the way you came from
 			if (((not connection.valid) or (not in_connect.valid)) and 
@@ -217,7 +218,8 @@ class Connection(object):
 		# self.end.time += traversal_time
 		self.time = time
 
-		self.valid = end.name is not 1
+		self.valid = True
+		# self.valid = end.name is not 1
 
 	def __str__(self):
 		return ("Connect: [" + str(self.valid) + " (" + 
