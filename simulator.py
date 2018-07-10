@@ -96,10 +96,10 @@ class Simulator(object):
 				
 			color = 'dark green' if connection.valid else 'red'
 
-			invert = self.invert(connection)
+			# invert = self.invert(connection)
 			to_draw = connection # whichever connection to draw
-			if connection.valid and not invert.valid:
-				to_draw = invert # always draw an invalid connection if you can
+			# if connection.valid and not invert.valid:
+			# 	to_draw = invert # always draw an invalid connection if you can
 
 			# description of the connection
 			node = to_draw.start
@@ -107,7 +107,7 @@ class Simulator(object):
 			connect_pointer = self.rrt_connection_pointers.get(connect_name)
 
 			# print "testing: ", connection.time, " <= ", time, connection.time <= time
-			if connection and connection.time <= time:
+			if connection and node and connection.time <= time:
 				# print "adlfjklad ", not to_draw.start in self.rrt_connection_pointers
 				if not connect_pointer:
 					# get the actual node, not the name of it

@@ -16,7 +16,7 @@ class RRT(object):
 	branch_len_max = 180.0
 
 	# the smaller, the fewer branches are created
-	branch_weight = 10
+	branch_weight = 3
 
 	# update in seconds
 	time_step = .5
@@ -55,23 +55,27 @@ class RRT(object):
 
 	def create_rrt(self):
 		# need a second node to be able to run validity
-		self.add_node(self.base, [], 0)
-		self.add_branch(0, 0)
+		first_node = self.add_node(self.base, [], 0)
+		branch = self.add_branch(0, 0)
+		# self.data[first_node].append(self.add_connect(first_node, branch, 0))
 
 		for i in range(1, int(self.max_time / self.time_step)):
 			self.add_branches(i * self.time_step)
+
+		self.create_lengths(first_node, 0, [])
+
+		# for key, value in self.connects.items():
+			# print value
 
 		self.update(0)
 						
 
 	def update(self, t):
-
-		# print self
-
 		base = self.name_to_node.get(0)
 
 		if self.sim and base:
 			self.validity(self.add_connect(None, base, 0), t)
+			print self
 			self.sim.display_sim(t)
 
 		# wait one time_step, then redraw
@@ -85,7 +89,9 @@ class RRT(object):
 
 		connections = []
 		for connection_node in connection_nodes:
-			connections.append(self.add_connect(new_node, connection_node, time))
+			other_connect = self.connect_name(connection_node, new_node)
+			if not other_connect in self.connects:
+				connections.append(self.add_connect(new_node, connection_node, time))
 		self.data[new_node] = connections
 
 		self.name_to_node[self.rrt_index] = new_node
@@ -101,8 +107,25 @@ class RRT(object):
 		# print "connect t: ", time
 
 		new_connect_name = self.connect_name(start, end)
+		# if start in self.data and not new_connect in :
+		# 	self.data[start].append(new_connect)
+		# if end in self.data:
+		# 	self.data[end].append(new_connect)
 		self.connects[new_connect_name] = new_connect
 		return new_connect
+
+	# loops over all connections to a node and marks how long they are
+	def create_lengths(self, node, length_before, visited):
+		visited.append(node)
+		for connection in self.data[node]:
+			next_node = connection.end
+			if not next_node in visited:
+				length = (node.loc.subtract(next_node.loc).len() / RRT.traversal_rate
+					if (node and next_node) else 0) # distance between node and next_node
+				length_before += length
+				connection.time += length_before
+				next_node.time += length_before
+				self.create_lengths(next_node, length_before, visited)
 
 	def node_name(self, node):
 		return str(node.name) if node else "None"
@@ -137,8 +160,11 @@ class RRT(object):
 
 			rand_a += math.pi/10
 
-		new_branch = self.add_node(rand_loc, [trunk, ], time)
+		new_branch = self.add_node(rand_loc, [], time)
 		self.data[trunk].append(self.add_connect(trunk, new_branch, time))
+		# self.data[trunk].append(self.add_connect(trunk, new_branch, time))
+
+		return new_branch
 
 	# check validity of node paths, moves downards through connections to in_connect.end
 	def validity(self, in_connect, time):
@@ -146,12 +172,16 @@ class RRT(object):
 			# TODO: look if the connection intersects an obstacle
 
 
-
+			print "start", in_connect.end
+			print "end", connection.end
+			print "valid", connection.valid
 			# if this node isn't valid, nothing it connects to is
 			# ignore the way you came from
-			if not connection.valid and connection.end is not in_connect.start:
+			if (((not connection.valid) or (not in_connect.valid)) and 
+				in_connect.end is not connection.end):
 				connection.valid = False
 				connection.end.valid = False
+				# connection.start.valid = False
 				self.validity(connection, time)
 
 	# see https://www.desmos.com/calculator/zw6bjoeph2 for the probability outputted
@@ -173,8 +203,7 @@ class Node(object):
 		self.valid = True
 
 	def __str__(self):
-		return ("Node: [" + str(self.valid) + " " + str(self.name) + 
-			": (" + str(self.loc[0]) + ", " + str(self.loc[1]) + ") ]")
+		return ("[" + str(self.name) + ": " + str(self.valid) + "]")
 
 # connects two nodes
 class Connection(object):
@@ -182,10 +211,11 @@ class Connection(object):
 	def __init__(self, start, end, time):
 		self.start = start
 		self.end = end
-		traversal_time = (start.loc.subtract(end.loc).len() / RRT.traversal_rate 
-			if (start and end) else 0)
-		self.time = time + traversal_time
-		self.end.time += traversal_time
+		# traversal_time = (start.loc.subtract(end.loc).len() / RRT.traversal_rate 
+		# 	if (start and end) else 0)
+		# self.time = time + traversal_time
+		# self.end.time += traversal_time
+		self.time = time
 
 		self.valid = end.name is not 1
 
