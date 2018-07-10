@@ -48,6 +48,15 @@ class Vector(object):
 
 		return Vector(tuple(new_vector))
 
+	# subtracts other from self
+	def subtract(self, other):
+		new_vector = []
+
+		for i in range(0, len(self)):
+			new_vector.append(self[i] - other[i])
+
+		return Vector(tuple(new_vector))
+
 class Shape(object):
 	# Takes an tuple of vectors defining the corners of the shape relative to the center, 
 	# clockwise from UL; where the center starts; and a velocity that the shape is moving at

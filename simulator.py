@@ -1,12 +1,5 @@
 import Tkinter as tk
 
-# import sys
-# import math
-# import random
-
-# from linalgebra import *
-# from rrt import *
-
 class Simulator(object):
 	def __init__(self, root, obstacles, rrt):
 		self.canvas = None

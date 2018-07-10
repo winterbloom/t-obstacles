@@ -7,6 +7,23 @@ from linalgebra import *
 from simulator import *
 
 class RRT(object):
+
+	# pixels traveled per second by simbot
+	traversal_rate = 50
+
+	# length of randomly created branches
+	branch_len_min = 20.0
+	branch_len_max = 180.0
+
+	# the smaller, the fewer branches are created
+	branch_weight = 10
+
+	# update in seconds
+	time_step = .5
+
+	# the maximum time the simulator runs to
+	max_time = 10
+
 	def __init__(self, root):
 		self.size = 7
 		self.speed = 20
@@ -21,20 +38,8 @@ class RRT(object):
 		self.connects = {}
 		self.name_to_node = {} # converts a name to a node
 
-
-		# length of randomly created branches
-		self.branch_len_min = 20.0
-		self.branch_len_max = 180.0
-
 		# probability of creating a new branch off of an existing one, checked each loop cycle
-		self.branch_weight = 10 # the smaller, the fewer branches are created
 		self.branch_creation = self.update_branch_creation()
-
-		# update in seconds
-		self.time_step = .5
-
-		# the maximum time the simulator runs to
-		self.max_time = 10
 
 	def __str__(self):
 		str_list = []
@@ -54,7 +59,6 @@ class RRT(object):
 		self.add_branch(0, 0)
 
 		for i in range(1, int(self.max_time / self.time_step)):
-			self.validity(self.add_connect(None, self.name_to_node[0], 0))
 			self.add_branches(i * self.time_step)
 
 		self.update(0)
@@ -64,7 +68,10 @@ class RRT(object):
 
 		# print self
 
-		if self.sim:
+		base = self.name_to_node.get(0)
+
+		if self.sim and base:
+			self.validity(self.add_connect(None, base, 0), t)
 			self.sim.display_sim(t)
 
 		# wait one time_step, then redraw
@@ -112,35 +119,46 @@ class RRT(object):
 
 	# creates a branch in a random direction with given name off of given trunk
 	def add_branch(self, trunk_name, time):
-		rand_a = random.random() * 2.0*math.pi # random number between [0, 2 pi)
-		rand_dist = random.random() * self.branch_len_max + self.branch_len_min # random distance
-
-		rand_x = math.cos(rand_a) * rand_dist
-		rand_y = math.sin(rand_a) * rand_dist
-
-		rand_loc = Vector((rand_x, rand_y))
-
 		trunk = self.name_to_node[trunk_name]
 
-		new_branch = self.add_node(rand_loc.add(trunk.loc), [trunk, ], time)
+		# random number between [0, 2 pi), measured counterlockwise from the horizontal
+		rand_a = random.random() * 2.0*math.pi
+
+		while True:
+			rand_dist = random.random() * self.branch_len_max + self.branch_len_min
+
+			rand_x = math.cos(rand_a) * rand_dist
+			rand_y = math.sin(rand_a) * rand_dist
+			rand_loc = Vector((rand_x, rand_y)).add(trunk.loc)
+			# print rand_loc
+			if rand_loc[0] > 0 and rand_loc[0] < 400 and rand_loc[1] > 0 and rand_loc[1] < 400:
+				# within the canvas
+				break
+
+			rand_a += math.pi/10
+
+		new_branch = self.add_node(rand_loc, [trunk, ], time)
 		self.data[trunk].append(self.add_connect(trunk, new_branch, time))
 
 	# check validity of node paths, moves downards through connections to in_connect.end
-	def validity(self, in_connect):
+	def validity(self, in_connect, time):
 		for connection in self.data[in_connect.end]:
+			# TODO: look if the connection intersects an obstacle
+
+
+
 			# if this node isn't valid, nothing it connects to is
 			# ignore the way you came from
 			if not connection.valid and connection.end is not in_connect.start:
 				connection.valid = False
 				connection.end.valid = False
-				self.validity(connection)
-			# look if the connection intersects an obstacle
+				self.validity(connection, time)
 
 	# see https://www.desmos.com/calculator/zw6bjoeph2 for the probability outputted
 	# see https://www.desmos.com/calculator/2iovtlu2fn for average nodes created each loop cycle
 	# both are based on the number of existing nodes
 	def update_branch_creation(self):
-		self.branch_creation = 1 - math.tanh(len(self.data)/self.branch_weight)
+		self.branch_creation = 1 - math.tanh(len(self.data)/RRT.branch_weight)
 		return self.branch_creation
 
 
@@ -164,7 +182,10 @@ class Connection(object):
 	def __init__(self, start, end, time):
 		self.start = start
 		self.end = end
-		self.time = time
+		traversal_time = (start.loc.subtract(end.loc).len() / RRT.traversal_rate 
+			if (start and end) else 0)
+		self.time = time + traversal_time
+		self.end.time += traversal_time
 
 		self.valid = end.name is not 1
 
