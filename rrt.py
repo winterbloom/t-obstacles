@@ -82,8 +82,8 @@ class RRT(object):
 		# self.root.after(int(self.time_step * 1000), self.update, t + self.time_step)
 
 	# creates a node which is at the given x, y; connected to connections; and has a name
-	def add_node(self, loc, connection_nodes, time):
-		new_node = Node(self.rrt_index, loc, time)
+	def add_node(self, loc, connection_nodes, t):
+		new_node = Node(self.rrt_index, loc, t)
 
 		# loop over names of connections and create a new one
 
@@ -91,7 +91,7 @@ class RRT(object):
 		for connection_node in connection_nodes:
 			other_connect = self.connect_name(connection_node, new_node)
 			if not other_connect in self.connects:
-				connections.append(self.add_connect(new_node, connection_node, time))
+				connections.append(self.add_connect(new_node, connection_node, t))
 		self.data[new_node] = connections
 
 		self.name_to_node[self.rrt_index] = new_node
@@ -101,8 +101,8 @@ class RRT(object):
 
 		return new_node
 
-	def add_connect(self, start, end, time):
-		new_connect = Connection(start, end, time)
+	def add_connect(self, start, end, t):
+		new_connect = Connection(start, end, t)
 		
 		# print "connect t: ", time
 
@@ -123,8 +123,8 @@ class RRT(object):
 				length = (node.loc.subtract(next_node.loc).len() / RRT.traversal_rate
 					if (node and next_node) else 0) # distance between node and next_node
 				length_before += length
-				connection.time += length_before
-				next_node.time += length_before
+				connection.t += length_before
+				next_node.t += length_before
 				self.create_lengths(next_node, length_before, visited)
 
 	def node_name(self, node):
@@ -134,14 +134,14 @@ class RRT(object):
 		return self.node_name(start) + ":" + self.node_name(end)
 
 	# creates a series of random branches off of each existing node
-	def add_branches(self, time):
+	def add_branches(self, t):
 		for key in self.data.keys():
 			add_branch = random.random() <= self.update_branch_creation()
 			if add_branch and key.valid:
-				self.add_branch(key.name, time)
+				self.add_branch(key.name, t)
 
 	# creates a branch in a random direction with given name off of given trunk
-	def add_branch(self, trunk_name, time):
+	def add_branch(self, trunk_name, t):
 		trunk = self.name_to_node[trunk_name]
 
 		# random number between [0, 2 pi), measured counterlockwise from the horizontal
@@ -160,14 +160,14 @@ class RRT(object):
 
 			rand_a += math.pi/10
 
-		new_branch = self.add_node(rand_loc, [], time)
-		self.data[trunk].append(self.add_connect(trunk, new_branch, time))
+		new_branch = self.add_node(rand_loc, [], t)
+		self.data[trunk].append(self.add_connect(trunk, new_branch, t))
 		# self.data[trunk].append(self.add_connect(trunk, new_branch, time))
 
 		return new_branch
 
 	# check validity of node paths, moves downards through connections to in_connect.end
-	def validity(self, in_connect, time):
+	def validity(self, in_connect, t):
 		for connection in self.data[in_connect.end]:
 			# TODO: look if the connection intersects an obstacle
 
@@ -183,7 +183,7 @@ class RRT(object):
 				connection.valid = False
 				connection.end.valid = False
 				# connection.start.valid = False
-				self.validity(connection, time)
+				self.validity(connection, t)
 
 	# see https://www.desmos.com/calculator/zw6bjoeph2 for the probability outputted
 	# see https://www.desmos.com/calculator/2iovtlu2fn for average nodes created each loop cycle
@@ -195,11 +195,11 @@ class RRT(object):
 
 # represents a single node in the rrt
 class Node(object):
-	def __init__(self, name, loc, time):
+	def __init__(self, name, loc, t):
 		self.name = name
 		self.size = 7
 		self.loc = loc
-		self.time = time
+		self.t = t
 
 		self.valid = True
 
@@ -209,14 +209,14 @@ class Node(object):
 # connects two nodes
 class Connection(object):
 
-	def __init__(self, start, end, time):
+	def __init__(self, start, end, t):
 		self.start = start
 		self.end = end
 		# traversal_time = (start.loc.subtract(end.loc).len() / RRT.traversal_rate 
 		# 	if (start and end) else 0)
 		# self.time = time + traversal_time
 		# self.end.time += traversal_time
-		self.time = time
+		self.t = t
 
 		self.valid = True
 		# self.valid = end.name is not 1

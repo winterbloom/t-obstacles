@@ -1,5 +1,7 @@
 import Tkinter as tk
 
+import math
+
 class Simulator(object):
 	def __init__(self, root, obstacles, rrt):
 		self.canvas = None
@@ -15,6 +17,7 @@ class Simulator(object):
 		self.centroid_pointers = {}
 		self.rrt_node_pointers = {}
 		self.rrt_connection_pointers = {}
+		self.rrt_label_pointers = {}
 		self.timestamp_pointer = None
 
 		self.start_draw()
@@ -34,7 +37,7 @@ class Simulator(object):
 		draw.bind('<Button-1>', self.start_prog)
 
 		time = tk.Scale(from_=0, to=self.rrt.max_time, length=(self.canvas_height - 25), resolution=.1, 
-			activebackground='lawn green', troughcolor='forest green', state=tk.DISABLED,
+			activebackground='orchid3', troughcolor='orchid1', state=tk.DISABLED,
 			command= lambda _: self.rrt.update(time.get()))
 		time.pack(side='right')
 		self.time = time
@@ -68,33 +71,41 @@ class Simulator(object):
 			fill='green')
 
 	# draws the rrt by looping over each node and each node's connections to other nodes
-	def draw_rrt(self, time):
+	def draw_rrt(self, t):
 		for node, connections in self.rrt.data.items():
 
-			color = 'dark green' if node.valid else 'red'
+			color = 'PaleGreen1' if node.valid else 'red'
 
 			# print "t: ", time
 
 			# draw the connections too
-			self.draw_connections(time, connections)
+			self.draw_connections(t, connections)
 
-			if node and node.time <= time:
+			if node and node.t <= t:
 				if not node in self.rrt_node_pointers: # first time
 					self.rrt_node_pointers[node] = self.canvas.create_oval(self.draw_dot((
 						node.loc[0],
 						node.loc[1]),
 						node.size),
 						fill=color)
+					self.rrt_label_pointers[node] = self.canvas.create_text(
+						node.loc[0], 
+						node.loc[1] - 13, 
+						fill='black',
+						text="t = " + str(math.ceil(node.t*10)/10)) # round to one decimal place
 				else: # all later instances
 					self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color, outline=color)
+					self.canvas.itemconfig(self.rrt_label_pointers[node], fill='black')
 			elif self.rrt_node_pointers.get(node):
 				self.canvas.itemconfig(self.rrt_node_pointers[node], fill='white', outline='white')
+				self.canvas.itemconfig(self.rrt_label_pointers[node], fill='white')
+				self.canvas.tag_lower(self.rrt_label_pointers[node])
 				self.canvas.tag_lower(self.rrt_node_pointers[node])
 
-	def draw_connections(self, time, connections):
+	def draw_connections(self, t, connections):
 		for connection in connections:
 				
-			color = 'dark green' if connection.valid else 'red'
+			color = 'PaleGreen1' if connection.valid else 'red'
 
 			# invert = self.invert(connection)
 			to_draw = connection # whichever connection to draw
@@ -107,7 +118,7 @@ class Simulator(object):
 			connect_pointer = self.rrt_connection_pointers.get(connect_name)
 
 			# print "testing: ", connection.time, " <= ", time, connection.time <= time
-			if connection and node and connection.time <= time:
+			if connection and node and connection.t <= t:
 				# print "adlfjklad ", not to_draw.start in self.rrt_connection_pointers
 				if not connect_pointer:
 					# get the actual node, not the name of it
@@ -147,7 +158,7 @@ class Simulator(object):
 				absolute_points.append(abs_point[1])
 
 			if not obstacle.t0 in self.obstacle_pointers:
-				obstacle_pointer = self.canvas.create_polygon(absolute_points, fill='blue')
+				obstacle_pointer = self.canvas.create_polygon(absolute_points, fill='light blue')
 				# use t0 as a key, since we can assume no two shapes start atop each other
 				self.obstacle_pointers[obstacle.t0] = obstacle_pointer
 				self.canvas.tag_raise(obstacle_pointer)
@@ -162,7 +173,7 @@ class Simulator(object):
 				# need to add to the t0 point to get the absolute location
 				absolute_centroid = self.draw_dot(obstacle.centroid(t).add(obstacle.t0), 3)
 				self.centroid_pointers[obstacle.t0] = self.canvas.create_oval(absolute_centroid, 
-					fill="cyan", outline="")
+					fill="steel blue", outline="")
 			else:
 				centroid_pointer = self.centroid_pointers.get(obstacle.t0)
 				absolute_centroid = self.draw_dot(obstacle.centroid(t).add(obstacle.t0), 3)
