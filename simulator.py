@@ -22,28 +22,49 @@ class Simulator(object):
 		self.centroid_pointers = {}
 		self.rrt_node_pointers = {}
 		self.rrt_connection_pointers = {}
+		self.timestamp_pointer = None
 
 		self.start_draw()
 
 	def start_draw(self):
+		self.root.geometry(str(self.canvas_width + 75) + "x" + str(self.canvas_height))
+
 		self.canvas = tk.Canvas(self.root, width=self.canvas_width, height=self.canvas_height)
-		self.canvas.pack()
+		self.canvas.pack(side='left')
 
 		stop = tk.Button(self.root, text='Exit')
 		stop.pack(side='bottom')
 		stop.bind('<Button-1>', self.stop_prog)
 
-		draw = tk.Button(self.root, text='Start', command= lambda: self.rrt.update(0))
+		draw = tk.Button(self.root, text='Start') #, command= lambda: self.rrt.update(0))
 		draw.pack(side='bottom')
-		# draw.bind('<Button-1>', self.display_sim)
+		draw.bind('<Button-1>', self.start_prog)
+
+		time = tk.Scale(from_=0, to=self.rrt.max_time, length=(self.canvas_height - 25), resolution=.1, 
+			activebackground='lawn green', troughcolor='forest green', state=tk.DISABLED,
+			command= lambda _: self.rrt.update(time.get()))
+		time.pack(side='right')
+		self.time = time
+
+	def start_prog(self, event=None):
+		self.time.config(state="normal")
+		self.rrt.create_rrt()
 
 	def stop_prog(self, event=None):
 		self.root.quit()
 
 	def display_sim(self, t, event=None):
+		self.draw_rrt(t)
 		self.draw_obstacles(t)
-		self.draw_rrt()
-		# self.draw_base()
+		self.draw_base()
+		self.draw_timestamp(t)
+
+	# displays a timestamp in the upper left corner
+	def draw_timestamp(self, t):
+		if not self.timestamp_pointer:
+			self.timestamp_pointer = self.canvas.create_text(30, 10, text="t = " + str(t))
+		else:
+			self.canvas.itemconfig(self.timestamp_pointer, text="t = " + str(t))
 
 	# draws a dot for the robot
 	def draw_base(self):
@@ -54,44 +75,65 @@ class Simulator(object):
 			fill='green')
 
 	# draws the rrt by looping over each node and each node's connections to other nodes
-	def draw_rrt(self):
+	def draw_rrt(self, time):
 		for node, connections in self.rrt.data.items():
 
 			color = 'dark green' if node.valid else 'red'
 
-			if not node in self.rrt_node_pointers:
-				self.rrt_node_pointers[node] = self.canvas.create_oval(self.draw_dot((
-					node.loc[0],
-					node.loc[1]),
-					node.size),
-					fill=color)
-			else:
-				self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color)
+			# print "t: ", time
 
 			# draw the connections too
-			for connection in connections:
+			self.draw_connections(time, connections)
+
+			if node and node.time <= time:
+				if not node in self.rrt_node_pointers: # first time
+					self.rrt_node_pointers[node] = self.canvas.create_oval(self.draw_dot((
+						node.loc[0],
+						node.loc[1]),
+						node.size),
+						fill=color)
+				else: # all later instances
+					self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color, outline=color)
+			elif self.rrt_node_pointers.get(node):
+				self.canvas.itemconfig(self.rrt_node_pointers[node], fill='white', outline='white')
+				self.canvas.tag_lower(self.rrt_node_pointers[node])
+
+	def draw_connections(self, time, connections):
+		for connection in connections:
 				
-				color = 'dark green' if connection.valid else 'red'
+			color = 'dark green' if connection.valid else 'red'
 
-				invert = self.invert(connection)
-				to_draw = connection # whichever connection to draw
-				if connection.valid and not invert.valid:
-					to_draw = invert # always draw an invalid connection if you can
+			invert = self.invert(connection)
+			to_draw = connection # whichever connection to draw
+			if connection.valid and not invert.valid:
+				to_draw = invert # always draw an invalid connection if you can
 
-				if not to_draw.start in self.rrt_connection_pointers:
+			# description of the connection
+			node = to_draw.start
+			connect_name = self.rrt.connect_name(to_draw.start, to_draw.end)
+			connect_pointer = self.rrt_connection_pointers.get(connect_name)
+
+			# print "testing: ", connection.time, " <= ", time, connection.time <= time
+			if connection and connection.time <= time:
+				# print "adlfjklad ", not to_draw.start in self.rrt_connection_pointers
+				if not connect_pointer:
 					# get the actual node, not the name of it
 					other_node = to_draw.end
-					node = to_draw.start
 
-					self.rrt_connection_pointers[node] = self.canvas.create_line(
+					connect_pointer = self.canvas.create_line(
 						node.loc[0],
 						node.loc[1],
 						other_node.loc[0],
 						other_node.loc[1],
 						fill=color,
 						width=4)
+					self.rrt_connection_pointers[connect_name] = connect_pointer
+					self.canvas.tag_lower(connect_pointer)
 				else:
-					self.canvas.itemconfig(self.rrt_node_pointers[to_draw.start], fill=color)
+					self.canvas.itemconfig(connect_pointer, fill=color)
+			elif self.rrt_connection_pointers.get(connect_name):
+				self.canvas.itemconfig(connect_pointer, fill='white')
+				self.canvas.tag_lower(connect_pointer)
 
 	# returns the connection which goes end -> start
 	def invert(self, connection):
@@ -115,6 +157,7 @@ class Simulator(object):
 				obstacle_pointer = self.canvas.create_polygon(absolute_points, fill='blue')
 				# use t0 as a key, since we can assume no two shapes start atop each other
 				self.obstacle_pointers[obstacle.t0] = obstacle_pointer
+				self.canvas.tag_raise(obstacle_pointer)
 			else:
 				# modify the existing obstacle
 				obstacle_pointer = self.obstacle_pointers.get(obstacle.t0)

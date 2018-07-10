@@ -6,23 +6,11 @@ import sys
 from linalgebra import *
 from simulator import *
 
-# stores variables to tune all random numbers
-class Tune(object):
-	# length of randomly created branches
-	branch_len_min = 20.0
-	branch_len_max = 180.0
-
-	# probability of creating a new branch off of an existing one, checked each loop cycle
-	branch_creation = .3
-
-	# update in seconds
-	time_step = .5
-
 class RRT(object):
 	def __init__(self, root):
 		self.size = 7
 		self.speed = 20
-		self.base = Vector((200, 375))
+		self.base = Vector((200, 200))
 
 		self.sim = None
 		self.root = root
@@ -32,6 +20,21 @@ class RRT(object):
 		self.data = {}
 		self.connects = {}
 		self.name_to_node = {} # converts a name to a node
+
+
+		# length of randomly created branches
+		self.branch_len_min = 20.0
+		self.branch_len_max = 180.0
+
+		# probability of creating a new branch off of an existing one, checked each loop cycle
+		self.branch_weight = 10 # the smaller, the fewer branches are created
+		self.branch_creation = self.update_branch_creation()
+
+		# update in seconds
+		self.time_step = .5
+
+		# the maximum time the simulator runs to
+		self.max_time = 10
 
 	def __str__(self):
 		str_list = []
@@ -45,39 +48,51 @@ class RRT(object):
 		str_list.append("]")
 		return ''.join(str_list)
 
+	def create_rrt(self):
+		# need a second node to be able to run validity
+		self.add_node(self.base, [], 0)
+		self.add_branch(0, 0)
+
+		for i in range(1, int(self.max_time / self.time_step)):
+			self.validity(self.add_connect(None, self.name_to_node[0], 0))
+			self.add_branches(i * self.time_step)
+
+		self.update(0)
+						
+
 	def update(self, t):
 
 		# print self
 
 		if self.sim:
-			self.validity(self.add_connect(None, self.name_to_node[0]))
-
-			self.add_branches()
 			self.sim.display_sim(t)
 
 		# wait one time_step, then redraw
-		self.root.after(int(Tune.time_step * 1000), self.update, t + Tune.time_step)
+		# self.root.after(int(self.time_step * 1000), self.update, t + self.time_step)
 
 	# creates a node which is at the given x, y; connected to connections; and has a name
-	def add_node(self, loc, connection_nodes):
-		new_node = Node(self.rrt_index, loc)
+	def add_node(self, loc, connection_nodes, time):
+		new_node = Node(self.rrt_index, loc, time)
 
 		# loop over names of connections and create a new one
 
 		connections = []
 		for connection_node in connection_nodes:
-			connections.append(self.add_connect(new_node, connection_node))
+			connections.append(self.add_connect(new_node, connection_node, time))
 		self.data[new_node] = connections
 
 		self.name_to_node[self.rrt_index] = new_node
 
+		# print "node t: ", time
 		self.rrt_index += 1
 
 		return new_node
 
-	def add_connect(self, start, end):
-		new_connect = Connection(start, end)
+	def add_connect(self, start, end, time):
+		new_connect = Connection(start, end, time)
 		
+		# print "connect t: ", time
+
 		new_connect_name = self.connect_name(start, end)
 		self.connects[new_connect_name] = new_connect
 		return new_connect
@@ -89,16 +104,16 @@ class RRT(object):
 		return self.node_name(start) + ":" + self.node_name(end)
 
 	# creates a series of random branches off of each existing node
-	def add_branches(self):
+	def add_branches(self, time):
 		for key in self.data.keys():
-			add_branch = random.random() <= Tune.branch_creation
+			add_branch = random.random() <= self.update_branch_creation()
 			if add_branch and key.valid:
-				self.add_branch(key.name)
+				self.add_branch(key.name, time)
 
 	# creates a branch in a random direction with given name off of given trunk
-	def add_branch(self, trunk_name):
+	def add_branch(self, trunk_name, time):
 		rand_a = random.random() * 2.0*math.pi # random number between [0, 2 pi)
-		rand_dist = random.random() * Tune.branch_len_max + Tune.branch_len_min # random distance
+		rand_dist = random.random() * self.branch_len_max + self.branch_len_min # random distance
 
 		rand_x = math.cos(rand_a) * rand_dist
 		rand_y = math.sin(rand_a) * rand_dist
@@ -107,8 +122,8 @@ class RRT(object):
 
 		trunk = self.name_to_node[trunk_name]
 
-		new_branch = self.add_node(rand_loc.add(trunk.loc), [trunk, ])
-		self.data[trunk].append(self.add_connect(trunk, new_branch))
+		new_branch = self.add_node(rand_loc.add(trunk.loc), [trunk, ], time)
+		self.data[trunk].append(self.add_connect(trunk, new_branch, time))
 
 	# check validity of node paths, moves downards through connections to in_connect.end
 	def validity(self, in_connect):
@@ -117,18 +132,25 @@ class RRT(object):
 			# ignore the way you came from
 			if not connection.valid and connection.end is not in_connect.start:
 				connection.valid = False
-				print "invalid"
 				connection.end.valid = False
 				self.validity(connection)
 			# look if the connection intersects an obstacle
 
+	# see https://www.desmos.com/calculator/zw6bjoeph2 for the probability outputted
+	# see https://www.desmos.com/calculator/2iovtlu2fn for average nodes created each loop cycle
+	# both are based on the number of existing nodes
+	def update_branch_creation(self):
+		self.branch_creation = 1 - math.tanh(len(self.data)/self.branch_weight)
+		return self.branch_creation
+
 
 # represents a single node in the rrt
 class Node(object):
-	def __init__(self, name, loc):
+	def __init__(self, name, loc, time):
 		self.name = name
 		self.size = 7
 		self.loc = loc
+		self.time = time
 
 		self.valid = True
 
@@ -139,9 +161,10 @@ class Node(object):
 # connects two nodes
 class Connection(object):
 
-	def __init__(self, start, end):
+	def __init__(self, start, end, time):
 		self.start = start
 		self.end = end
+		self.time = time
 
 		self.valid = end.name is not 1
 
@@ -183,8 +206,6 @@ def main():
 
 	root = tk.Tk()
 	rrt = RRT(root)
-	new_node = rrt.add_node(rrt.base, [])
-	rrt.add_branch(0)
 	# print rrt
 	sim = Simulator(root, obstacles, rrt)
 	rrt.sim = sim
