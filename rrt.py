@@ -16,13 +16,13 @@ class RRT(object):
 	branch_len_max = 180.0
 
 	# the smaller, the fewer branches are created
-	branch_weight = 20
+	branch_weight = 10
 
 	# update in seconds
 	time_step = .5
 
 	# the maximum time the simulator runs to
-	max_time = 10
+	max_time = 20
 
 	def __init__(self, root):
 		self.size = 7
@@ -142,8 +142,11 @@ class RRT(object):
 				) % 2*math.pi # fit the number into [0, 2pi]
 		# rand_a = random.random() * 2.0*math.pi
 
+		del_h = trunk.loc.subtract(self.goal).len()
+
 		while True:
 			rand_dist = random.random() * self.branch_len_max + self.branch_len_min
+			# rand_dist = random.random() * (del_h + 30) + (del_h - 30)
 
 			rand_x = math.cos(rand_a) * rand_dist
 			rand_y = math.sin(rand_a) * rand_dist
