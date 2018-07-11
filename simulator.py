@@ -64,6 +64,8 @@ class Simulator(object):
 		self.draw_rrt(t)
 		self.draw_obstacles(t)
 		self.draw_base()
+		if t is 0:
+			self.draw_goal()
 		self.draw_timestamp(t)
 
 		# self.root.after(int(self.rrt.time_step * 1000), self.display_sim, t + self.rrt.time_step)
@@ -83,6 +85,19 @@ class Simulator(object):
 			self.rrt.size), 
 			fill='green')
 
+	# draws a dot for the goal node
+	def draw_goal(self):
+		self.canvas.create_oval(self.draw_dot((
+			self.rrt.goal[0], 
+			self.rrt.goal[1]),
+			self.rrt.size), 
+			fill='dodger blue')
+		self.canvas.create_text(
+			self.rrt.goal[0],
+			self.rrt.goal[1] - 14,
+			fill='black',
+			text='Goal')
+
 	# draws the rrt by looping over each node and each node's connections to other nodes
 	def draw_rrt(self, t):
 		for node, connections in self.rrt.data.items():
@@ -101,7 +116,7 @@ class Simulator(object):
 						fill=color)
 					self.rrt_label_pointers[node] = self.canvas.create_text(
 						node.loc[0], 
-						node.loc[1] - 13, 
+						node.loc[1] - 14, 
 						fill='black',
 						text=str(math.ceil(node.t*10)/10)) # round to one decimal place
 				else: # all later instances

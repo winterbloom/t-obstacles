@@ -16,7 +16,7 @@ class RRT(object):
 	branch_len_max = 180.0
 
 	# the smaller, the fewer branches are created
-	branch_weight = 10
+	branch_weight = 20
 
 	# update in seconds
 	time_step = .5
@@ -28,6 +28,7 @@ class RRT(object):
 		self.size = 7
 		self.speed = 20
 		self.base = Vector((200, 180))
+		self.goal = Vector((300, 50))
 
 		self.sim = None
 		self.root = root
@@ -130,8 +131,16 @@ class RRT(object):
 	def add_branch(self, trunk_name, t):
 		trunk = self.name_to_node[trunk_name]
 
+		# find angle between the trunk node and the goal node
+		del_x = self.goal[0] - trunk[0]
+		del_y = self.goal[1] - trunk[1]
+		goal_a = math.atan(del_y/del_x)
 		# random number between [0, 2 pi), measured counterlockwise from the horizontal
-		rand_a = random.random() * 2.0*math.pi
+		rand_a = ((random.random() - random.random() # random number in [-1, 1], weighted towards 0
+				+ 1)*math.pi # random number in [0, 2pi], weighted towards pi
+				+ (goal_a - math.pi) # weight the random numbers towards goal.a
+				) % 2*math.pi # fit the number into [0, 2pi]
+		# rand_a = random.random() * 2.0*math.pi
 
 		while True:
 			rand_dist = random.random() * self.branch_len_max + self.branch_len_min
