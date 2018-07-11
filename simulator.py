@@ -23,7 +23,7 @@ class Simulator(object):
 		self.start_draw()
 
 	def start_draw(self):
-		self.root.geometry(str(self.canvas_width + 75) + "x" + str(self.canvas_height))
+		self.root.geometry(str(self.canvas_width + 100) + "x" + str(self.canvas_height))
 
 		self.canvas = tk.Canvas(self.root, width=self.canvas_width, height=self.canvas_height)
 		self.canvas.pack(side='left')
@@ -31,6 +31,11 @@ class Simulator(object):
 		stop = tk.Button(self.root, text='Exit')
 		stop.pack(side='bottom')
 		stop.bind('<Button-1>', self.stop_prog)
+
+		more = tk.Button(self.root, text='More Time')
+		more.pack(side='bottom')
+		more.bind('<Button-1>', self.more_time)
+		self.more = more
 
 		draw = tk.Button(self.root, text='Start') #, command= lambda: self.rrt.update(0))
 		draw.pack(side='bottom')
@@ -42,9 +47,15 @@ class Simulator(object):
 		time.pack(side='right')
 		self.time = time
 
+	def more_time(self, event=None):
+		old_time = self.rrt.max_time
+		self.rrt.max_time += 10
+		self.canvas.itemconfig(self.more, to=self.rrt.max_time)
+		self.rrt.create_rrt(old_time)
+
 	def start_prog(self, event=None):
 		self.time.config(state="normal")
-		self.rrt.create_rrt()
+		self.rrt.create_rrt(0)
 
 	def stop_prog(self, event=None):
 		self.root.quit()
@@ -54,6 +65,8 @@ class Simulator(object):
 		self.draw_obstacles(t)
 		self.draw_base()
 		self.draw_timestamp(t)
+
+		# self.root.after(int(self.rrt.time_step * 1000), self.display_sim, t + self.rrt.time_step)
 
 	# displays a timestamp in the upper left corner
 	def draw_timestamp(self, t):
@@ -74,9 +87,7 @@ class Simulator(object):
 	def draw_rrt(self, t):
 		for node, connections in self.rrt.data.items():
 
-			color = 'PaleGreen1' if node.valid else 'red'
-
-			# print "t: ", time
+			color = 'PaleGreen1' if node.valid else 'salmon'
 
 			# draw the connections too
 			self.draw_connections(t, connections)
@@ -92,7 +103,7 @@ class Simulator(object):
 						node.loc[0], 
 						node.loc[1] - 13, 
 						fill='black',
-						text="t = " + str(math.ceil(node.t*10)/10)) # round to one decimal place
+						text=str(math.ceil(node.t*10)/10)) # round to one decimal place
 				else: # all later instances
 					self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color, outline=color)
 					self.canvas.itemconfig(self.rrt_label_pointers[node], fill='black')
@@ -105,24 +116,17 @@ class Simulator(object):
 	def draw_connections(self, t, connections):
 		for connection in connections:
 				
-			color = 'PaleGreen1' if connection.valid else 'red'
-
-			# invert = self.invert(connection)
-			to_draw = connection # whichever connection to draw
-			# if connection.valid and not invert.valid:
-			# 	to_draw = invert # always draw an invalid connection if you can
+			color = 'PaleGreen1' if connection.valid else 'salmon'
 
 			# description of the connection
-			node = to_draw.start
-			connect_name = self.rrt.connect_name(to_draw.start, to_draw.end)
+			node = connection.start
+			connect_name = self.rrt.connect_name(connection.start, connection.end)
 			connect_pointer = self.rrt_connection_pointers.get(connect_name)
 
-			# print "testing: ", connection.time, " <= ", time, connection.time <= time
 			if connection and node and connection.t <= t:
-				# print "adlfjklad ", not to_draw.start in self.rrt_connection_pointers
 				if not connect_pointer:
 					# get the actual node, not the name of it
-					other_node = to_draw.end
+					other_node = connection.end
 
 					connect_pointer = self.canvas.create_line(
 						node.loc[0],
@@ -149,7 +153,6 @@ class Simulator(object):
 		for obstacle in self.obstacles:
 			a = obstacle.velocity[2]
 			absolute_obs = obstacle.absolute_pos(t)
-			# print "obstacle: ", absolute_obs
 			absolute_points = []
 
 			for abs_point in absolute_obs.points:
@@ -177,7 +180,6 @@ class Simulator(object):
 			else:
 				centroid_pointer = self.centroid_pointers.get(obstacle.t0)
 				absolute_centroid = self.draw_dot(obstacle.centroid(t).add(obstacle.t0), 3)
-				# print "abs, ", absolute_centroid
 				self.canvas.coords(centroid_pointer, absolute_centroid)
 
 	# there is no built-in method for drawing a dot, so this implements one

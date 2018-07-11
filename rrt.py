@@ -27,7 +27,7 @@ class RRT(object):
 	def __init__(self, root):
 		self.size = 7
 		self.speed = 20
-		self.base = Vector((200, 200))
+		self.base = Vector((200, 180))
 
 		self.sim = None
 		self.root = root
@@ -53,19 +53,15 @@ class RRT(object):
 		str_list.append("]")
 		return ''.join(str_list)
 
-	def create_rrt(self):
+	def create_rrt(self, old_time):
 		# need a second node to be able to run validity
 		first_node = self.add_node(self.base, [], 0)
 		branch = self.add_branch(0, 0)
-		# self.data[first_node].append(self.add_connect(first_node, branch, 0))
 
-		for i in range(1, int(self.max_time / self.time_step)):
+		for i in range(1 + int(old_time), int(self.max_time / self.time_step)):
 			self.add_branches(i * self.time_step)
 
 		self.create_lengths(first_node, 0, [])
-
-		# for key, value in self.connects.items():
-			# print value
 
 		self.update(0)
 						
@@ -77,9 +73,6 @@ class RRT(object):
 			self.validity(self.add_connect(None, base, 0), t)
 			# print self
 			self.sim.display_sim(t)
-
-		# wait one time_step, then redraw
-		# self.root.after(int(self.time_step * 1000), self.update, t + self.time_step)
 
 	# creates a node which is at the given x, y; connected to connections; and has a name
 	def add_node(self, loc, connection_nodes, t):
@@ -96,7 +89,6 @@ class RRT(object):
 
 		self.name_to_node[self.rrt_index] = new_node
 
-		# print "node t: ", time
 		self.rrt_index += 1
 
 		return new_node
@@ -104,13 +96,7 @@ class RRT(object):
 	def add_connect(self, start, end, t):
 		new_connect = Connection(start, end, t)
 		
-		# print "connect t: ", time
-
 		new_connect_name = self.connect_name(start, end)
-		# if start in self.data and not new_connect in :
-		# 	self.data[start].append(new_connect)
-		# if end in self.data:
-		# 	self.data[end].append(new_connect)
 		self.connects[new_connect_name] = new_connect
 		return new_connect
 
@@ -153,7 +139,6 @@ class RRT(object):
 			rand_x = math.cos(rand_a) * rand_dist
 			rand_y = math.sin(rand_a) * rand_dist
 			rand_loc = Vector((rand_x, rand_y)).add(trunk.loc)
-			# print rand_loc
 			if rand_loc[0] > 0 and rand_loc[0] < 400 and rand_loc[1] > 0 and rand_loc[1] < 400:
 				# within the canvas
 				break
@@ -162,28 +147,60 @@ class RRT(object):
 
 		new_branch = self.add_node(rand_loc, [], t)
 		self.data[trunk].append(self.add_connect(trunk, new_branch, t))
-		# self.data[trunk].append(self.add_connect(trunk, new_branch, time))
 
 		return new_branch
 
 	# check validity of node paths, moves downards through connections to in_connect.end
 	def validity(self, in_connect, t):
 		for connection in self.data[in_connect.end]:
+			connection.valid = True
+			connection.end.valid = True
 			# TODO: look if the connection intersects an obstacle
-
-
-			# print "start", in_connect.end
-			# print "end", connection.end
-			# print "valid", connection.valid
-
+			# print connection
+			if self.intersects_obs(connection, t):
+				connection.valid = False
+				# print connection
 			# if this node isn't valid, nothing it connects to is
 			# ignore the way you came from
 			if (((not connection.valid) or (not in_connect.valid)) and 
 				in_connect.end is not connection.end):
 				connection.valid = False
 				connection.end.valid = False
-				# connection.start.valid = False
+			if in_connect.end is not connection.end:
 				self.validity(connection, t)
+
+	# Returns true if the connection intersects any obstacle
+	def intersects_obs(self, connection, t):
+		for obstacle in self.sim.obstacles:
+			if self.intersects_ob(connection, obstacle, t):
+				# print obstacle
+				return True
+		return False
+
+	# Checks each side of the obstacle and see if it intersects the connection
+	# see https://www.cdn.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
+	def intersects_ob(self, connection, obstacle, t):
+		# allows the last vertex to loop back to the first one
+		vertices = list(obstacle.absolute_pos(t).points)
+		vertices.append(vertices[0])
+
+		# print "obs", obstacle.points
+
+		for i in range(0, len(vertices) - 1):
+			side = Connection(vertices[i], vertices[i+1], 0)
+			# print side[0], side[1]
+			# print "connection", connection[0], connection[1]
+			side_1 = side.get_rotate(connection[0])
+			side_2 = side.get_rotate(connection[1])
+
+			connect_1 = connection.get_rotate(side[0])
+			connect_2 = connection.get_rotate(side[1])
+
+			# if both sets go different directions, then the side intersects the connection
+			if (side_1 is not side_2) and (connect_1 is not connect_2):
+				return True
+
+		return False
 
 	# see https://www.desmos.com/calculator/zw6bjoeph2 for the probability outputted
 	# see https://www.desmos.com/calculator/2iovtlu2fn for average nodes created each loop cycle
@@ -203,8 +220,11 @@ class Node(object):
 
 		self.valid = True
 
+	def __getitem__(self, index):
+		return self.loc[index]
+
 	def __str__(self):
-		return ("[" + str(self.name) + ": " + str(self.valid) + "]")
+		return ("[" + str(self.name) + ": " + str(self.valid) + " " + str(self.t) + " " + str(self.loc) +  "]")
 
 # connects two nodes
 class Connection(object):
@@ -212,10 +232,6 @@ class Connection(object):
 	def __init__(self, start, end, t):
 		self.start = start
 		self.end = end
-		# traversal_time = (start.loc.subtract(end.loc).len() / RRT.traversal_rate 
-		# 	if (start and end) else 0)
-		# self.time = time + traversal_time
-		# self.end.time += traversal_time
 		self.t = t
 
 		self.valid = True
@@ -224,6 +240,20 @@ class Connection(object):
 	def __str__(self):
 		return ("Connect: [" + str(self.valid) + " (" + 
 			str(self.start) + " to " + str(self.end) + ") ]")
+
+	def __getitem__(self, index):
+		if index is 0:
+			return self.start
+		elif index is 1:
+			return self.end
+
+	# returns the direction the connection rotates relative to the input vector
+	# see https://www.geeksforgeeks.org/orientation-3-ordered-points/
+	# returns True --> clockwise; False --> counterclockwise
+	def get_rotate(self, vector):
+		direction = ((self.end[1] - self.start[1]) * (vector[0] - self.end[0]) -
+			(self.end[0] - self.start[0]) * (vector[1] - self.end[1]))
+		return direction > 0
 
 def main():
 
@@ -237,7 +267,10 @@ def main():
 		Vector((40, 40)), 
 		Vector((-40, 40))
 		),
-		Vector((100, 100, 0)), null)
+		Vector((100, 100, 0)), Vector((30, 0, 0)))
+
+	line = Connection(Vector((200, 180)), Vector((160.308, 314.109)), 0)
+	# side = Connection(Vector((0, 0)), Vector((100, 0)), 0)
 
 	ob2 = Shape((
 		Vector((0, -40)), 
@@ -259,9 +292,13 @@ def main():
 
 	root = tk.Tk()
 	rrt = RRT(root)
-	# print rrt
 	sim = Simulator(root, obstacles, rrt)
 	rrt.sim = sim
+
+	# print rrt.intersects_obs(line)
+
+	# print side.get_rotate(Vector((120, 20)))
+	# sim.canvas.create_line(100, 100, 190, 110)
 
 	root.mainloop()
 
