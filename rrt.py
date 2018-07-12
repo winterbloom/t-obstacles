@@ -203,7 +203,7 @@ class RRT(object):
 	def find_goal_path(self, to_find, visited):
 
 		if to_find is self.first_node:
-			visited.append(self.first_node)
+			# visited.append(self.first_node)
 			return visited
 
 		for node, connections in self.data.items():
@@ -212,7 +212,7 @@ class RRT(object):
 				if to_find is connection.end:
 					if not connection.valid: # the connection to the node isn't valid
 						return None
-					visited.append(to_find)
+					visited.append(connection)
 					# then look for a node which connects to that one
 					return self.find_goal_path(node, visited)
 

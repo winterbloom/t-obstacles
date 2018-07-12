@@ -23,6 +23,8 @@ class Simulator(object):
 		self.timestamp_pointer = None
 
 		self.finish_time = -1
+		self.visited = []
+		self.visited_nodes = []
 
 		self.start_draw()
 
@@ -97,8 +99,16 @@ class Simulator(object):
 		self.rrt.branch_weight = 5 + curr_t
 		# found a goal node
 		if visited and self.finish_time is -1:
-			max_time = (visited[0].t + visited[0].len + 1)
+			max_time = (visited[0].end.t + visited[0].end.len + 1)
+			self.visited_nodes.append(visited[0].start)
+
+			for item in visited:
+				self.visited_nodes.append(item.end)
+
+			print max_time
+
 			self.finish_time = max_time
+			self.visited = visited
 			self.time.configure(to=max_time, activebackground='green3', troughcolor='OliveDrab2')
 		# haven't found the goal yet, keep generating more time
 		elif self.finish_time is -1:
@@ -154,6 +164,8 @@ class Simulator(object):
 						fill='black',
 						text=str(math.ceil((node.t + node.len)*10)/10)) # round to one decimal place
 				else: # all later instances
+					if node in self.visited_nodes:
+						color = 'RoyalBlue1' if abs(t - self.finish_time) < .1 else color
 					self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color, outline=color)
 					self.canvas.itemconfig(self.rrt_label_pointers[node], fill='black')
 			elif self.rrt_node_pointers.get(node):
@@ -165,7 +177,7 @@ class Simulator(object):
 	def draw_connections(self, t, connections):
 		for connection in connections:
 				
-			color = 'PaleGreen1' if connection.valid else 'salmon'
+			color = ('PaleGreen1' if connection.valid else 'salmon')
 
 			# description of the connection
 			node = connection.start
@@ -187,7 +199,10 @@ class Simulator(object):
 					self.rrt_connection_pointers[connect_name] = connect_pointer
 					self.canvas.tag_lower(connect_pointer)
 				else:
+					if connection in self.visited:
+						color = 'RoyalBlue1' if abs(t - self.finish_time) < .1 else color
 					self.canvas.itemconfig(connect_pointer, fill=color)
+
 			elif self.rrt_connection_pointers.get(connect_name):
 				self.canvas.itemconfig(connect_pointer, fill='white')
 				self.canvas.tag_lower(connect_pointer)
