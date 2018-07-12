@@ -84,7 +84,6 @@ class RRT(object):
 				if visited:
 					return visited
 
-			self.validity(self.add_connect(None, base, 0), t)
 			self.sim.display_sim(t)
 
 		return visited
@@ -189,6 +188,7 @@ class RRT(object):
 		new_connect = self.add_connect(trunk, new_branch, t)
 		self.data[trunk].append(new_connect)
 		self.create_lengths(self.first_node, 0, [])
+		self.validity(self.add_connect(None, self.first_node, 0), t)
 
 		if dist_to_goal <= self.success_radius:
 			visited = self.find_goal_path(new_branch, [])
@@ -342,7 +342,7 @@ def main():
 		Vector((0, 40)), 
 		Vector((-40, 0))
 		), 
-		Vector((200, 240, 0)), null)
+		Vector((200, 240, 0)), Vector((0, 10, -math.pi/3)))
 
 	ob3 = Shape((
 		Vector((-50, -20)), 

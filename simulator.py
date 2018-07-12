@@ -25,6 +25,7 @@ class Simulator(object):
 		self.finish_time = -1
 		self.visited = []
 		self.visited_nodes = []
+		self.to_end = None
 
 		self.start_draw()
 
@@ -38,37 +39,14 @@ class Simulator(object):
 		stop.pack(side='bottom')
 		stop.bind('<Button-1>', self.stop_prog)
 
-		more = tk.Button(self.root, text='More Time')
-		more.pack(side='bottom')
-		more.bind('<Button-1>', self.more_time)
-		self.more = more
-
-		draw = tk.Button(self.root, text='Start') #, command= lambda: self.rrt.update(0))
-		draw.pack(side='bottom')
-		draw.bind('<Button-1>', self.start_prog)
-
 		self.canvas.bind("<Button-1>", self.set_goal)
 
 	def set_goal(self, event):
 		self.rrt.goal = Vector((event.x, event.y))
 		self.start_prog()
 
-	def more_time(self, event=None):
-		# old_time = self.rrt.max_time
-		# self.rrt.max_time += 10
-		# self.canvas.itemconfig(self.more, to=self.rrt.max_time)
-		# self.rrt.create_rrt(old_time)
-		pass
-
 	def start_prog(self, event=None):
 		visited = self.rrt.create_rrt()
-
-		# self.rrt.max_time = (visited[0].t + visited[0].len) + 2
-
-		# print "Done at ", self.rrt.max_time
-		# print "Path:"
-		# for item in visited:
-		# 	print item
 
 		self.rrt.max_time = self.rrt.forward
 
@@ -99,13 +77,13 @@ class Simulator(object):
 		self.rrt.branch_weight = 5 + curr_t
 		# found a goal node
 		if visited and self.finish_time is -1:
-			max_time = (visited[0].end.t + visited[0].end.len + 1)
-			self.visited_nodes.append(visited[0].start)
+			max_time = (visited[0].end.t + visited[0].end.len + .1)
 
 			for item in visited:
 				self.visited_nodes.append(item.end)
+				print "visited", item.end
 
-			print max_time
+			print "time: ", max_time
 
 			self.finish_time = max_time
 			self.visited = visited
@@ -165,7 +143,7 @@ class Simulator(object):
 						text=str(math.ceil((node.t + node.len)*10)/10)) # round to one decimal place
 				else: # all later instances
 					if node in self.visited_nodes:
-						color = 'RoyalBlue1' if abs(t - self.finish_time) < .1 else color
+						color = 'RoyalBlue1' if self.at_finish_time(t) else color
 					self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color, outline=color)
 					self.canvas.itemconfig(self.rrt_label_pointers[node], fill='black')
 			elif self.rrt_node_pointers.get(node):
@@ -173,6 +151,11 @@ class Simulator(object):
 				self.canvas.itemconfig(self.rrt_label_pointers[node], fill='white')
 				self.canvas.tag_lower(self.rrt_label_pointers[node])
 				self.canvas.tag_lower(self.rrt_node_pointers[node])
+
+	# returns True if t is equal to self.finish_time 
+	# (ie: the moment when the path to the goal exists)
+	def at_finish_time(self, t):
+		return abs(t - self.finish_time) < .1
 
 	def draw_connections(self, t, connections):
 		for connection in connections:
@@ -200,12 +183,29 @@ class Simulator(object):
 					self.canvas.tag_lower(connect_pointer)
 				else:
 					if connection in self.visited:
-						color = 'RoyalBlue1' if abs(t - self.finish_time) < .1 else color
+						color = 'RoyalBlue1' if self.at_finish_time(t) else color
 					self.canvas.itemconfig(connect_pointer, fill=color)
 
 			elif self.rrt_connection_pointers.get(connect_name):
 				self.canvas.itemconfig(connect_pointer, fill='white')
 				self.canvas.tag_lower(connect_pointer)
+
+		if self.at_finish_time(t):
+			if self.to_end:
+				self.canvas.itemconfig(self.to_end, fill='RoyalBlue1')
+				self.canvas.tag_raise(self.to_end)
+			else:
+				self.to_end = self.canvas.create_line(
+					self.visited_nodes[0].loc[0],
+					self.visited_nodes[0].loc[1],
+					self.rrt.goal[0],
+					self.rrt.goal[1],
+					fill='RoyalBlue1',
+					width=4)
+				self.canvas.tag_raise(self.to_end)
+		elif self.to_end:
+			self.canvas.itemconfig(self.to_end, fill='white')
+			self.canvas.tag_lower(self.to_end)
 
 	# returns the connection which goes end -> start
 	def invert(self, connection):
