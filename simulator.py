@@ -2,6 +2,8 @@ import Tkinter as tk
 
 import math
 
+from linalgebra import *
+
 class Simulator(object):
 	def __init__(self, root, obstacles, rrt):
 		self.canvas = None
@@ -41,21 +43,39 @@ class Simulator(object):
 		draw.pack(side='bottom')
 		draw.bind('<Button-1>', self.start_prog)
 
+		self.canvas.bind("<Button-1>", self.set_goal)
+
+	def set_goal(self, event):
+		self.rrt.goal = Vector((event.x, event.y))
+		self.start_prog()
+
+	def more_time(self, event=None):
+		# old_time = self.rrt.max_time
+		# self.rrt.max_time += 10
+		# self.canvas.itemconfig(self.more, to=self.rrt.max_time)
+		# self.rrt.create_rrt(old_time)
+		pass
+
+	def start_prog(self, event=None):
+		visited = self.rrt.create_rrt()
+
+		# self.rrt.max_time = (visited[0].t + visited[0].len) + 2
+
+		# print "Done at ", self.rrt.max_time
+		# print "Path:"
+		# for item in visited:
+		# 	print item
+
+		self.rrt.max_time = 50
+
+		self.draw_goal()
+
 		time = tk.Scale(from_=0, to=self.rrt.max_time, length=(self.canvas_height - 25), resolution=.1, 
 			activebackground='orchid3', troughcolor='orchid1', state=tk.DISABLED,
 			command= lambda _: self.rrt.update(time.get()))
 		time.pack(side='right')
 		self.time = time
-
-	def more_time(self, event=None):
-		old_time = self.rrt.max_time
-		self.rrt.max_time += 10
-		self.canvas.itemconfig(self.more, to=self.rrt.max_time)
-		self.rrt.create_rrt(old_time)
-
-	def start_prog(self, event=None):
 		self.time.config(state="normal")
-		self.rrt.create_rrt(0)
 
 	def stop_prog(self, event=None):
 		self.root.quit()
@@ -64,8 +84,6 @@ class Simulator(object):
 		self.draw_rrt(t)
 		self.draw_obstacles(t)
 		self.draw_base()
-		if t is 0:
-			self.draw_goal()
 		self.draw_timestamp(t)
 
 		# self.root.after(int(self.rrt.time_step * 1000), self.display_sim, t + self.rrt.time_step)
@@ -107,7 +125,7 @@ class Simulator(object):
 			# draw the connections too
 			self.draw_connections(t, connections)
 
-			if node and node.t <= t:
+			if node and (node.t + node.len) <= t:
 				if not node in self.rrt_node_pointers: # first time
 					self.rrt_node_pointers[node] = self.canvas.create_oval(self.draw_dot((
 						node.loc[0],
@@ -118,7 +136,7 @@ class Simulator(object):
 						node.loc[0], 
 						node.loc[1] - 14, 
 						fill='black',
-						text=str(math.ceil(node.t*10)/10)) # round to one decimal place
+						text=str(math.ceil((node.t + node.len)*10)/10)) # round to one decimal place
 				else: # all later instances
 					self.canvas.itemconfig(self.rrt_node_pointers[node], fill=color, outline=color)
 					self.canvas.itemconfig(self.rrt_label_pointers[node], fill='black')
@@ -138,7 +156,7 @@ class Simulator(object):
 			connect_name = self.rrt.connect_name(connection.start, connection.end)
 			connect_pointer = self.rrt_connection_pointers.get(connect_name)
 
-			if connection and node and connection.t <= t:
+			if connection and node and (connection.t + connection.len) <= t:
 				if not connect_pointer:
 					# get the actual node, not the name of it
 					other_node = connection.end
@@ -184,7 +202,6 @@ class Simulator(object):
 				# modify the existing obstacle
 				obstacle_pointer = self.obstacle_pointers.get(obstacle.t0)
 				self.canvas.coords(obstacle_pointer, tuple(absolute_points))
-				# print "absolute points: ", absolute_points
 
 			if not obstacle.t0 in self.centroid_pointers:
 				# draw a dot at the centroid of the shape

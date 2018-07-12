@@ -1,6 +1,7 @@
 import Tkinter as tk
 
 import random
+import numpy as np
 import sys
 
 from linalgebra import *
@@ -22,13 +23,17 @@ class RRT(object):
 	time_step = .5
 
 	# the maximum time the simulator runs to
-	max_time = 20
+	max_time = 1
+
+	# the distance between a new node and the goal to decide we've met the goal
+	success_radius = 50
 
 	def __init__(self, root):
 		self.size = 7
 		self.speed = 20
 		self.base = Vector((200, 180))
-		self.goal = Vector((300, 50))
+		self.first_node = None
+		self.goal = Vector((300, 350))
 
 		self.sim = None
 		self.root = root
@@ -38,6 +43,10 @@ class RRT(object):
 		self.data = {}
 		self.connects = {}
 		self.name_to_node = {} # converts a name to a node
+
+		self.found_goal = False
+
+		self.top_time = 0
 
 		# probability of creating a new branch off of an existing one, checked each loop cycle
 		self.branch_creation = self.update_branch_creation()
@@ -54,25 +63,22 @@ class RRT(object):
 		str_list.append("]")
 		return ''.join(str_list)
 
-	def create_rrt(self, old_time):
+	def create_rrt(self):
 		# need a second node to be able to run validity
 		first_node = self.add_node(self.base, [], 0)
-		branch = self.add_branch(0, 0)
-
-		for i in range(1 + int(old_time), int(self.max_time / self.time_step)):
-			self.add_branches(i * self.time_step)
-
-		self.create_lengths(first_node, 0, [])
-
-		self.update(0)
-						
+		self.first_node = first_node
+		self.add_branch(0, 0)
 
 	def update(self, t):
 		base = self.name_to_node.get(0)
 
 		if self.sim and base:
+			if t > self.top_time:
+				self.top_time = t
+				self.add_branches(t)
+				self.create_lengths(self.first_node, 0, [])
+
 			self.validity(self.add_connect(None, base, 0), t)
-			# print self
 			self.sim.display_sim(t)
 
 	# creates a node which is at the given x, y; connected to connections; and has a name
@@ -110,8 +116,10 @@ class RRT(object):
 				length = (node.loc.subtract(next_node.loc).len() / RRT.traversal_rate
 					if (node and next_node) else 0) # distance between node and next_node
 				length_before += length
-				connection.t += length_before
-				next_node.t += length_before
+				if connection.len is 0:
+					connection.len = length_before
+				if next_node.len is 0:
+					next_node.len = length_before
 				self.create_lengths(next_node, length_before, visited)
 
 	def node_name(self, node):
@@ -124,8 +132,10 @@ class RRT(object):
 	def add_branches(self, t):
 		for key in self.data.keys():
 			add_branch = random.random() <= self.update_branch_creation()
-			if add_branch and key.valid:
-				self.add_branch(key.name, t)
+			if add_branch:
+				visited = self.add_branch(key.name, t)
+				if self.found_goal:
+					return visited
 
 	# creates a branch in a random direction with given name off of given trunk
 	def add_branch(self, trunk_name, t):
@@ -136,13 +146,18 @@ class RRT(object):
 		del_y = self.goal[1] - trunk[1]
 		goal_a = math.atan(del_y/del_x)
 		# random number between [0, 2 pi), measured counterlockwise from the horizontal
-		rand_a = ((random.random() - random.random() # random number in [-1, 1], weighted towards 0
-				+ 1)*math.pi # random number in [0, 2pi], weighted towards pi
-				+ (goal_a - math.pi) # weight the random numbers towards goal.a
-				) % 2*math.pi # fit the number into [0, 2pi]
+		# rand_a = ((random.random() - random.random() # random number in [-1, 1], weighted towards 0
+		# 		+ 1)*math.pi # random number in [0, 2pi], weighted towards pi
+		# 		+ (goal_a - math.pi) # weight the random numbers towards goal.a
+		# 		) % 2*math.pi # fit the number into [0, 2pi]
 		# rand_a = random.random() * 2.0*math.pi
+		# rand_a = ((np.random.randn() # assume this is usually [-2pi, 2pi], weighted to 0
+		# 		+ 2*math.pi)/2 # [0, 2pi], weighted to 2pi
+		# 		+ (goal_a - math.pi) # weighted to goal_a
+		# 		) % 2*math.pi
+		rand_a = np.random.normal(goal_a, .2) % 2.0*math.pi
 
-		del_h = trunk.loc.subtract(self.goal).len()
+		del_h = self.dist_to_goal(trunk)
 
 		while True:
 			rand_dist = random.random() * self.branch_len_max + self.branch_len_min
@@ -158,20 +173,48 @@ class RRT(object):
 			rand_a += math.pi/10
 
 		new_branch = self.add_node(rand_loc, [], t)
-		self.data[trunk].append(self.add_connect(trunk, new_branch, t))
 
-		return new_branch
+		dist_to_goal = self.dist_to_goal(new_branch)
+
+		new_connect = self.add_connect(trunk, new_branch, t)
+		self.data[trunk].append(new_connect)
+
+		if dist_to_goal <= self.success_radius:
+			visited = self.find_goal_path(new_branch, [new_branch])
+			if visited is not None:
+				self.found_goal = True
+				return visited
+
+		return None
+
+	# finds a path from to_find to the goal
+	def find_goal_path(self, to_find, visited):
+
+		if to_find is self.first_node:
+			visited.append(self.first_node)
+			return visited
+
+		for node, connections in self.data.items():
+			# find a node which connects to to_find
+			for connection in connections:
+				if to_find is connection.end:
+					if not connection.valid: # the connection to the node isn't valid
+						return None
+					visited.append(to_find)
+					# then look for a node which connects to that one
+					return self.find_goal_path(node, visited)
+
+	# the distance between the goal and the node
+	def dist_to_goal(self, node):
+		return node.loc.subtract(self.goal).len()
 
 	# check validity of node paths, moves downards through connections to in_connect.end
 	def validity(self, in_connect, t):
 		for connection in self.data[in_connect.end]:
 			connection.valid = True
 			connection.end.valid = True
-			# TODO: look if the connection intersects an obstacle
-			# print connection
 			if self.intersects_obs(connection, t):
 				connection.valid = False
-				# print connection
 			# if this node isn't valid, nothing it connects to is
 			# ignore the way you came from
 			if (((not connection.valid) or (not in_connect.valid)) and 
@@ -185,7 +228,6 @@ class RRT(object):
 	def intersects_obs(self, connection, t):
 		for obstacle in self.sim.obstacles:
 			if self.intersects_ob(connection, obstacle, t):
-				# print obstacle
 				return True
 		return False
 
@@ -196,12 +238,8 @@ class RRT(object):
 		vertices = list(obstacle.absolute_pos(t).points)
 		vertices.append(vertices[0])
 
-		# print "obs", obstacle.points
-
 		for i in range(0, len(vertices) - 1):
 			side = Connection(vertices[i], vertices[i+1], 0)
-			# print side[0], side[1]
-			# print "connection", connection[0], connection[1]
 			side_1 = side.get_rotate(connection[0])
 			side_2 = side.get_rotate(connection[1])
 
@@ -229,6 +267,7 @@ class Node(object):
 		self.size = 7
 		self.loc = loc
 		self.t = t
+		self.len = 0
 
 		self.valid = True
 
@@ -236,7 +275,7 @@ class Node(object):
 		return self.loc[index]
 
 	def __str__(self):
-		return ("[" + str(self.name) + ": " + str(self.valid) + " " + str(self.t) + " " + str(self.loc) +  "]")
+		return ("[" + str(self.name) + ": " + str(self.valid) + " " + str(self.t + len) + " " + str(self.loc) +  "]")
 
 # connects two nodes
 class Connection(object):
@@ -245,6 +284,7 @@ class Connection(object):
 		self.start = start
 		self.end = end
 		self.t = t
+		self.len = 0
 
 		self.valid = True
 		# self.valid = end.name is not 1
@@ -279,7 +319,7 @@ def main():
 		Vector((40, 40)), 
 		Vector((-40, 40))
 		),
-		Vector((100, 100, 0)), Vector((30, 0, 0)))
+		Vector((100, 100, 0)), Vector((30, -30, 0)))
 
 	line = Connection(Vector((200, 180)), Vector((160.308, 314.109)), 0)
 	# side = Connection(Vector((0, 0)), Vector((100, 0)), 0)
