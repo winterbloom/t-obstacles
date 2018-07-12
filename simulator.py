@@ -22,6 +22,8 @@ class Simulator(object):
 		self.rrt_label_pointers = {}
 		self.timestamp_pointer = None
 
+		self.finish_time = -1
+
 		self.start_draw()
 
 	def start_draw(self):
@@ -66,13 +68,13 @@ class Simulator(object):
 		# for item in visited:
 		# 	print item
 
-		self.rrt.max_time = 50
+		self.rrt.max_time = self.rrt.forward
 
 		self.draw_goal()
 
 		time = tk.Scale(from_=0, to=self.rrt.max_time, length=(self.canvas_height - 25), resolution=.1, 
 			activebackground='orchid3', troughcolor='orchid1', state=tk.DISABLED,
-			command= lambda _: self.rrt.update(time.get()))
+			command=self.update)
 		time.pack(side='right')
 		self.time = time
 		self.time.config(state="normal")
@@ -87,6 +89,20 @@ class Simulator(object):
 		self.draw_timestamp(t)
 
 		# self.root.after(int(self.rrt.time_step * 1000), self.display_sim, t + self.rrt.time_step)
+
+	# updates the rrt, generating more nodes
+	def update(self, event=None):
+		curr_t = self.time.get()
+		visited = self.rrt.update(curr_t)
+		self.rrt.branch_weight = 5 + curr_t
+		# found a goal node
+		if visited and self.finish_time is -1:
+			max_time = (visited[0].t + visited[0].len + 1)
+			self.finish_time = max_time
+			self.time.configure(to=max_time, activebackground='green3', troughcolor='OliveDrab2')
+		# haven't found the goal yet, keep generating more time
+		elif self.finish_time is -1:
+			self.time.configure(to=curr_t + self.rrt.forward)
 
 	# displays a timestamp in the upper left corner
 	def draw_timestamp(self, t):

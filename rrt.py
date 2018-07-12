@@ -26,7 +26,10 @@ class RRT(object):
 	max_time = 1
 
 	# the distance between a new node and the goal to decide we've met the goal
-	success_radius = 50
+	success_radius = 50.0
+
+	# how many seconds to display as a forwards choice on the slider
+	forward = 5
 
 	def __init__(self, root):
 		self.size = 7
@@ -72,14 +75,19 @@ class RRT(object):
 	def update(self, t):
 		base = self.name_to_node.get(0)
 
+		visited = None
+
 		if self.sim and base:
 			if t > self.top_time:
 				self.top_time = t
-				self.add_branches(t)
-				self.create_lengths(self.first_node, 0, [])
+				visited = self.add_branches(t)
+				if visited:
+					return visited
 
 			self.validity(self.add_connect(None, base, 0), t)
 			self.sim.display_sim(t)
+
+		return visited
 
 	# creates a node which is at the given x, y; connected to connections; and has a name
 	def add_node(self, loc, connection_nodes, t):
@@ -130,12 +138,14 @@ class RRT(object):
 
 	# creates a series of random branches off of each existing node
 	def add_branches(self, t):
+		visited = None
 		for key in self.data.keys():
 			add_branch = random.random() <= self.update_branch_creation()
 			if add_branch:
-				visited = self.add_branch(key.name, t)
-				if self.found_goal:
-					return visited
+				new_visited = self.add_branch(key.name, t)
+				if new_visited:
+					visited = new_visited
+		return visited
 
 	# creates a branch in a random direction with given name off of given trunk
 	def add_branch(self, trunk_name, t):
@@ -178,14 +188,16 @@ class RRT(object):
 
 		new_connect = self.add_connect(trunk, new_branch, t)
 		self.data[trunk].append(new_connect)
+		self.create_lengths(self.first_node, 0, [])
 
 		if dist_to_goal <= self.success_radius:
-			visited = self.find_goal_path(new_branch, [new_branch])
-			if visited is not None:
-				self.found_goal = True
-				return visited
+			visited = self.find_goal_path(new_branch, [])
+			# if visited:
+			# 	print "testing at", t
+			# 	for item in visited:
+			# 		print "visited: ", item
 
-		return None
+			return visited
 
 	# finds a path from to_find to the goal
 	def find_goal_path(self, to_find, visited):
@@ -275,7 +287,7 @@ class Node(object):
 		return self.loc[index]
 
 	def __str__(self):
-		return ("[" + str(self.name) + ": " + str(self.valid) + " " + str(self.t + len) + " " + str(self.loc) +  "]")
+		return ("[" + str(self.name) + ": " + str(self.valid) + " " + str(self.t + self.len) + " " + str(self.loc) +  "]")
 
 # connects two nodes
 class Connection(object):

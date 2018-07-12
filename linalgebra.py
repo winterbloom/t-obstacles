@@ -26,7 +26,7 @@ class Vector(object):
 	def len(self):
 		total = 0
 		for coord in self.coords:
-			total += coord**2
+			total += coord**2.0
 
 		return math.sqrt(total)
 
